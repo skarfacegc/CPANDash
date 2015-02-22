@@ -55,7 +55,9 @@ sub getPods
     my $paths;
     my $i;
 
-    my $mcpan = MetaCPAN::Client->new();
+    my $mcpan = MetaCPAN::Client->new(
+        ua_args => [agent => 'CPANDash'],
+    );
 
     my $all_modules = $mcpan->all( 'modules', { fields => [ "name", "module" ] } );
 
