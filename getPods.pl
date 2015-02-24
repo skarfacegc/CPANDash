@@ -15,7 +15,7 @@ use File::Path qw(make_path);
 my $DB_NAME = './poddb.sqlite';
 
 my $uPAUSE     = "250000";                     # How long to pause so as not to slam metacpan in usec
-my $BATCH_SIZE = "1000";                        # How many items to process in a batch.
+my $BATCH_SIZE = "100";                        # How many items to process in a batch.
 my $URL_BASE   = "http://metacpan.org/pod/";
 my $BASE_DIR = "./HTMLDocs";
 
@@ -81,7 +81,6 @@ sub getModules
             undef $names;
             undef $paths;
             undef $types;
-            return;
         }
     }
 
