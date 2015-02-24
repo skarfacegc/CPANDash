@@ -10,44 +10,42 @@ use FileHandle;
 use DBI;
 use Time::HiRes qw( usleep );
 use HTTP::Tiny;
+use File::Path qw(make_path);
 
 my $DB_NAME = './poddb.sqlite';
 
-my $uPAUSE     = "250000";    # How long to pause so as not to slam metacpan in usec
-my $BATCH_SIZE = "100";       # How many items to process in a batch.
-my $URL_BASE = "http://metacpan.org/pod/";
-
-
+my $uPAUSE     = "250000";                     # How long to pause so as not to slam metacpan in usec
+my $BATCH_SIZE = "1000";                        # How many items to process in a batch.
+my $URL_BASE   = "http://metacpan.org/pod/";
+my $BASE_DIR = "./HTMLDocs";
 
 # used to give us some stats as to how many items we found links for
 my $SKIPPED = 0;
 my $STORED  = 0;
 my $TOTAL   = 0;
 
-my $DBH;  #tracks the database handle
-
-
-
+my $DBH;                                       #tracks the database handle
 
 main();
 
 sub main
 {
     createDB() if ( !-e $DB_NAME );
-    getPods();
-    validateDB();
+    getModules();
+    getDocs();
 
     print "Stored: $STORED\n";
     print "Skipped: $SKIPPED\n";
     print "TOTAL: $TOTAL\n";
     print "Skip %: " . int( ( $SKIPPED / $TOTAL ) * 100 ) . "\n";
 }
+
 #
 # Get the list of all of the availble modules
 # The loop through all of the packages(?) in the module
 # and build a list of names
 #
-sub getPods
+sub getModules
 {
     my $module;
     my $names;
@@ -55,9 +53,7 @@ sub getPods
     my $paths;
     my $i;
 
-    my $mcpan = MetaCPAN::Client->new(
-        ua_args => [agent => 'CPANDash'],
-    );
+    my $mcpan = MetaCPAN::Client->new( ua_args => [ agent => 'CPANDash' ] );
 
     my $all_modules = $mcpan->all( 'modules', { fields => [ "name", "module" ] } );
 
@@ -73,9 +69,7 @@ sub getPods
 
             push( @$names, $mod->{name} );
             push( @$types, "Package" );
-            push( @$paths, $URL_BASE . $mod->{name} );
-
-            $TOTAL++;
+            push( @$paths, buildPath( $mod->{name} ) . "/" . $mod->{name} . ".html" );
         }
 
         $i++;
@@ -87,6 +81,7 @@ sub getPods
             undef $names;
             undef $paths;
             undef $types;
+            return;
         }
     }
 
@@ -94,6 +89,115 @@ sub getPods
     storeData( $names, $paths, $types );
 }
 
+# Write a doc row to the database
+sub storeData
+{
+    my ( $names, $paths, $types ) = @_;
+    my $rows;
+
+    my $dbh = getDBH();
+    my $sql = qq{
+        INSERT OR IGNORE INTO searchIndex(name, path, type) VALUES (?,?,?);
+    };
+
+    my $sth = $dbh->prepare($sql);
+    ( undef, $rows ) = $sth->execute_array( {}, $names, $paths, $types ) or die 'failed to insert:' . $DBI::errstr;
+}
+
+# Delete a row from the db
+sub deleteByID
+{
+    my ($row_id) = @_;
+
+    my $dbh = getDBH();
+    my $sql = qq{
+        DELETE FROM searchIndex WHERE id = $row_id ;
+    };
+
+    my $sth = $dbh->prepare($sql);
+    $sth->execute() or die "error deleting:" . $DBI::errstr;
+
+}
+
+#
+# Now that we have all of the package names, go through the
+# DB and try to find docs for each package.  if the doc
+# exists, write it to disk, otherwise remove the row from the DB
+#
+sub getDocs
+{
+    my $result;
+    my $dbh = getDBH();
+    my $sql = qq{
+        SELECT * FROM searchIndex
+    };
+
+    my $sth = $dbh->prepare($sql);
+    $sth->execute() or die 'Error loading: ' . $DBI::errstr;
+
+    while ( $result = $sth->fetchrow_hashref )
+    {
+        $TOTAL++;
+        my $pod;
+
+        eval{ $pod = getPod( $result->{name} ) };
+
+        # If we get a pod, store it
+        if ( defined($pod) && $pod ne "" )
+        {
+            $STORED++;
+            print "STORE: " . $result->{name} . " " . $result->{id} . "\n";
+            writePod( $result->{name}, $pod );
+        }
+
+        # otherwise remove the entry from the database
+        else
+        {
+            $SKIPPED++;
+            print "\tSKIPPING: " . $result->{name} . " " . $result->{id} . "\n";
+            deleteByID( $result->{id} );
+        }
+    }
+}
+
+# Get the pod in html form and return it.
+sub getPod
+{
+    my ($package) = @_;
+
+    my $mcpan = MetaCPAN::Client->new( ua_args => [ agent => 'CPANDash' ] );
+
+    my $pod = $mcpan->pod($package)->html;
+
+    return $pod;
+}
+
+# WRite the pod to disk creating path as needed
+sub writePod
+{
+    my ( $package, $pod ) = @_;
+
+    my $mkdir_error;
+    my $path_name = buildPath($package);
+    my $filename  = $package . ".html";
+
+    make_path("$BASE_DIR/$path_name");
+
+    my $fh = FileHandle->new("> $BASE_DIR/$path_name/$filename") or die "Couldn't open file for write: $!";
+    print $fh $pod;
+    $fh->close;
+}
+
+# Construct the path string
+sub buildPath
+{
+    my ($package) = @_;
+
+    $package =~ s/::/\//g;
+    return $package;
+}
+
+# Creates the database
 sub createDB
 {
     my $dbh = getDBH();
@@ -115,55 +219,24 @@ sub createDB
     $sthi->execute();
 }
 
-sub storeData
+# gets the database handle
+sub getDBH
 {
-    my ( $names, $paths, $types ) = @_;
-    my $rows;
-
-    my $dbh = getDBH();
-    my $sql = qq{
-        INSERT OR IGNORE INTO searchIndex(name, path, type) VALUES (?,?,?);
-    };
-
-    my $sth = $dbh->prepare($sql);
-    ( undef, $rows ) = $sth->execute_array( {}, $names, $paths, $types ) or die 'failed to insert:' . $DBI::errstr;
-
-    print "** Inserted: $rows\n";
-}
-
-sub deleteByID
-{
-    my ($row_id) = @_;
-
-    my $dbh = getDBH();
-    my $sql = qq{
-        DELETE FROM searchIndex WHERE id = $row_id ;
-    };
-
-    my $sth = $dbh->prepare($sql);
-    $sth->execute() or die "error deleting:" . $DBI::errstr;
-
-}
-
-sub checkURL
-{
-    my ($pod_name) = @_;
-
-    my $http = HTTP::Tiny->new();
-
-    # Check to see if there are docs where we expect them on metacpan
-    # use a head request to conserve bandwidth
-    my $resp = $http->head( $URL_BASE . $pod_name );
-
-    if ( $resp->{success} == 1 )
+    if ( defined($DBH) )
     {
-        return $URL_BASE . $pod_name;
+        return $DBH;
     }
     else
     {
-        return;
+        $DBH = DBI->connect( "dbi:SQLite:dbname=$DB_NAME", '', '' );
+        return $DBH;
     }
 }
+
+#
+# These two methods were for URL validation
+# not used for pod retreival. Left here for no good reason
+#
 
 sub validateDB
 {
@@ -190,14 +263,14 @@ sub validateDB
         else
         {
             $SKIPPED++;
-            print "\tSKIPPING ". $result->{name} . "\n";
-            deleteByID($result->{id});
+            print "\tSKIPPING " . $result->{name} . "\n";
+            deleteByID( $result->{id} );
         }
 
         $counter++;
 
         # Pause every $BATHCSIZE iterations
-        if($counter % $BATCH_SIZE == 0)
+        if ( $counter % $BATCH_SIZE == 0 )
         {
             usleep($uPAUSE);
         }
@@ -205,16 +278,23 @@ sub validateDB
     }
 }
 
-sub getDBH
+sub checkURL
 {
-    if(defined($DBH))
+    my ($pod_name) = @_;
+
+    my $http = HTTP::Tiny->new();
+
+    # Check to see if there are docs where we expect them on metacpan
+    # use a head request to conserve bandwidth
+    my $resp = $http->head( $URL_BASE . $pod_name );
+
+    if ( $resp->{success} == 1 )
     {
-        return $DBH;
+        return $URL_BASE . $pod_name;
     }
     else
     {
-        $DBH = DBI->connect( "dbi:SQLite:dbname=$DB_NAME", '', '' );
-        return $DBH;
+        return;
     }
 }
 
