@@ -2,3 +2,4 @@
 *sublime*
 *.sqlite
 HTMLDocs
+CPAN.docset/Contents/Resources/*
