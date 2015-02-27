@@ -1,7 +1,7 @@
-#!/bin/bash
+#!/bin/zsh
 
 # Clean out old files
-rm -rf CPAN.docset/Contents/Resources/Documents/*
+rm -rf CPAN.docset/Contents/Resources/Documents/*(/)
 rm CPAN.docset/Contents/Resources/docSet.dsidx
 
 # Move new files into place
