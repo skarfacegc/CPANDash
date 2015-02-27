@@ -8,7 +8,8 @@
 	<string>CPAN</string>
 	<key>DocSetPlatformFamily</key>
 	<string>CPAN</string>
-	<key>isDashDocset</key>
-	<true/>
+	<key>isDashDocset</key><true/>
+    <key>isJavaScriptEnabled</key>
+    <true/>
 </dict>
 </plist>

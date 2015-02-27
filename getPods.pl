@@ -81,6 +81,7 @@ sub getModules
             undef $names;
             undef $paths;
             undef $types;
+            return;
         }
     }
 
@@ -153,7 +154,7 @@ sub getDocs
         else
         {
             $SKIPPED++;
-            print "\tSKIPPING: " . $result->{name} . " " . $result->{id} . "\n";
+            print "\tSKIPPING: " . $result->{id} . "   " . $result->{name}."\n";
             deleteByID( $result->{id} );
         }
     }
@@ -180,10 +181,14 @@ sub writePod
     my $path_name = buildPath($package);
     my $filename  = $package . ".html";
 
+    # Figure out our path depth so we can set the relative link correclty in the html
+    my @split_path = split /\//, $path_name;
+    my $depth = scalar @split_path;
+
     make_path("$BASE_DIR/$path_name");
 
     my $fh = FileHandle->new("> $BASE_DIR/$path_name/$filename") or die "Couldn't open file for write: $!";
-    print $fh $pod;
+    print $fh updateHTML($depth, $pod);
     $fh->close;
 }
 
@@ -230,6 +235,39 @@ sub getDBH
         $DBH = DBI->connect( "dbi:SQLite:dbname=$DB_NAME", '', '' );
         return $DBH;
     }
+}
+
+
+sub updateHTML
+{
+    my ($depth, $html) = @_;
+
+    my $path = '../' x $depth;
+
+    my $header = <<"HEADER";
+<html>
+<head>
+  <title>CGI::Session</title>
+
+  <link rel="stylesheet" type="text/css" href="${path}style.css" />
+  <link rel="stylesheet" href="${path}default.min.css" />
+  <script src="${path}highlight.min.js"></script>
+
+
+
+</head>
+<body>
+
+<script>hljs.initHighlightingOnLoad();</script>
+HEADER
+    
+    my $footer = <<"FOOTER";
+</body>
+</html>
+FOOTER
+
+return $header . $html . $footer;
+
 }
 
 #
