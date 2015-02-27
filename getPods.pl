@@ -81,7 +81,6 @@ sub getModules
             undef $names;
             undef $paths;
             undef $types;
-            return;
         }
     }
 
