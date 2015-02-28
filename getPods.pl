@@ -10,14 +10,15 @@ use FileHandle;
 use DBI;
 use Time::HiRes qw( usleep );
 use HTTP::Tiny;
-use File::Path qw(make_path);
+use File::Path qw(make_path remove_tree);
 
-my $DB_NAME = './poddb.sqlite';
+my $DB_NAME = './CPAN.docset/Contents/Resources/docSet.dsidx';
 
 my $uPAUSE     = "250000";                     # How long to pause so as not to slam metacpan in usec
 my $BATCH_SIZE = "100";                        # How many items to process in a batch.
 my $URL_BASE   = "http://metacpan.org/pod/";
 my $BASE_DIR = "./HTMLDocs";
+my $BASE_DIR   = "./CPAN.docset/Contents/Resources/Documents";
 
 # used to give us some stats as to how many items we found links for
 my $SKIPPED = 0;
@@ -30,6 +31,7 @@ main();
 
 sub main
 {
+    cleanUP();
     createDB() if ( !-e $DB_NAME );
     getModules();
     getDocs();
@@ -266,6 +268,23 @@ HEADER
 FOOTER
 
 return $header . $html . $footer;
+# Clean out the destination directories and files
+sub cleanUP
+{
+    unlink $DB_NAME;
+
+    opendir(DH, $BASE_DIR);
+    my @files = readdir(DH);
+    close(DH);
+
+    foreach my $file (@files)
+    {    
+        next if($file =~ /^\.$/);
+        next if($file =~ /^\.\.$/);
+        next unless(-d $BASE_DIR . "/" . $file);
+
+        remove_tree($BASE_DIR . "/" . $file);
+    }
 
 }
 
