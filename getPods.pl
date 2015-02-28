@@ -14,10 +14,9 @@ use File::Path qw(make_path remove_tree);
 
 my $DB_NAME = './CPAN.docset/Contents/Resources/docSet.dsidx';
 
-my $uPAUSE     = "250000";                     # How long to pause so as not to slam metacpan in usec
-my $BATCH_SIZE = "100";                        # How many items to process in a batch.
+my $uPAUSE     = "250000";                                       # How long to pause so as not to slam metacpan in usec
+my $BATCH_SIZE = "100";                                          # How many items to process in a batch.
 my $URL_BASE   = "http://metacpan.org/pod/";
-my $BASE_DIR = "./HTMLDocs";
 my $BASE_DIR   = "./CPAN.docset/Contents/Resources/Documents";
 
 # used to give us some stats as to how many items we found links for
@@ -25,7 +24,7 @@ my $SKIPPED = 0;
 my $STORED  = 0;
 my $TOTAL   = 0;
 
-my $DBH;                                       #tracks the database handle
+my $DBH;                                                         #tracks the database handle
 
 main();
 
@@ -141,13 +140,13 @@ sub getDocs
         $TOTAL++;
         my $pod;
 
-        eval{ $pod = getPod( $result->{name} ) };
+        eval { $pod = getPod( $result->{name} ) };
 
         # If we get a pod, store it
         if ( defined($pod) && $pod ne "" )
         {
             $STORED++;
-            print "STORE: " . $result->{name} . " " . $result->{id} . "\n";
+            print "STORE: " . $result->{id} . "    " . $result->{name} . "\n";
             writePod( $result->{name}, $pod );
         }
 
@@ -155,7 +154,7 @@ sub getDocs
         else
         {
             $SKIPPED++;
-            print "\tSKIPPING: " . $result->{id} . "   " . $result->{name}."\n";
+            print "\tSKIPPING: " . $result->{id} . "   " . $result->{name} . "\n";
             deleteByID( $result->{id} );
         }
     }
@@ -189,7 +188,7 @@ sub writePod
     make_path("$BASE_DIR/$path_name");
 
     my $fh = FileHandle->new("> $BASE_DIR/$path_name/$filename") or die "Couldn't open file for write: $!";
-    print $fh updateHTML($depth, $pod);
+    print $fh updateHTML( $depth, $pod, $package );
     $fh->close;
 }
 
@@ -238,17 +237,16 @@ sub getDBH
     }
 }
 
-
 sub updateHTML
 {
-    my ($depth, $html) = @_;
+    my ( $depth, $html, $title ) = @_;
 
     my $path = '../' x $depth;
 
     my $header = <<"HEADER";
 <html>
 <head>
-  <title>CGI::Session</title>
+  <title>$title</title>
 
   <link rel="stylesheet" type="text/css" href="${path}style.css" />
   <link rel="stylesheet" href="${path}default.min.css" />
@@ -261,29 +259,32 @@ sub updateHTML
 
 <script>hljs.initHighlightingOnLoad();</script>
 HEADER
-    
+
     my $footer = <<"FOOTER";
 </body>
 </html>
 FOOTER
 
-return $header . $html . $footer;
+    return $header . $html . $footer;
+
+}
+
 # Clean out the destination directories and files
 sub cleanUP
 {
     unlink $DB_NAME;
 
-    opendir(DH, $BASE_DIR);
+    opendir( DH, $BASE_DIR );
     my @files = readdir(DH);
     close(DH);
 
     foreach my $file (@files)
-    {    
-        next if($file =~ /^\.$/);
-        next if($file =~ /^\.\.$/);
-        next unless(-d $BASE_DIR . "/" . $file);
+    {
+        next if ( $file =~ /^\.$/ );
+        next if ( $file =~ /^\.\.$/ );
+        next unless ( -d $BASE_DIR . "/" . $file );
 
-        remove_tree($BASE_DIR . "/" . $file);
+        remove_tree( $BASE_DIR . "/" . $file );
     }
 
 }
