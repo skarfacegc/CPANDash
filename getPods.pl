@@ -143,7 +143,7 @@ sub getDocs
         eval { $pod = getPod( $result->{name} ) };
 
         # If we get a pod, store it
-        if ( defined($pod) && $pod ne "" )
+        if ( defined($pod) && $pod !~ /^\s+$/ && $result->{name} !~ /^_.*/)
         {
             $STORED++;
             print "STORE: " . $result->{id} . "    " . $result->{name} . "\n";
